@@ -743,6 +743,10 @@ docker ps  # Verify Neo4j is running
 - If model not found: Verify model name in `.env` (e.g., use `gpt-4o-mini` not `gpt-5-mini`)
 
 **4. FAISS segmentation fault (SIGSEGV):**
+
+FAISS can crash on macOS (especially Apple Silicon) with segmentation faults when indexing large datasets (55K+ vectors). Try these solutions in order:
+
+**Option A: Move duplicate chunks (try this first):**
 ```bash
 # Move non-enriched chunks to avoid duplicate indexing
 mkdir -p data/chunks_backup
@@ -756,6 +760,21 @@ python index/build_index.py \
   --index-type flat \
   --batch-size 16
 ```
+
+**Option B: Use NumPy alternative (recommended if FAISS keeps crashing):**
+```bash
+# Use pure Python/NumPy implementation instead of FAISS
+python index/build_index_numpy.py \
+  --chunks data/chunks \
+  --out index \
+  --model sentence-transformers/all-MiniLM-L6-v2
+```
+
+This creates `embeddings.npy` instead of `faiss.index`. The rest of the pipeline automatically detects and uses the NumPy index - no other changes needed!
+
+**Performance note:** NumPy index is ~20-30% slower than FAISS but completely stable on macOS.
+
+**For more details, see [FAISS_FIX_GUIDE.md](./FAISS_FIX_GUIDE.md)**
 
 **5. Out of memory during indexing:**
 ```bash

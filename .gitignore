@@ -49,8 +49,6 @@ graph/*.json
 !graph/.gitkeep
 
 # Results
-results/
-reports/
 !results/.gitkeep
 !reports/.gitkeep
 

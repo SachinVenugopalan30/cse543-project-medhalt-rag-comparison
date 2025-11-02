@@ -1,0 +1,3 @@
+Metric,Baseline,RAG,Improvement
+penalized_accuracy,0.5625,0.015,-0.5475
+abstention_rate,0.0,0.71,0.71

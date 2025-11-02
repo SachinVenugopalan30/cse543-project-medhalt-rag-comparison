@@ -1,0 +1,8 @@
+Metric,Value
+penalized_accuracy,0.0075
+total_questions,100.0
+correct,15.0
+incorrect,57.0
+abstained,28.0
+accuracy_on_answered,0.20833333333333334
+abstention_rate,0.28
