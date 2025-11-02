@@ -172,10 +172,6 @@ From testing with 100K PubMed abstracts on 100 Med-HALT questions:
 ## Important Documentation Files
 
 - **[HowToRun.md](./HowToRun.md)** - Complete step-by-step execution guide with all commands
-- **[RESULTS_ANALYSIS.md](./RESULTS_ANALYSIS.md)** - Detailed analysis of results with metric explanations
-- **[SCALING_TO_100K.md](./SCALING_TO_100K.md)** - Guide for scaling from 10K to 100K corpus
-- **[FAISS_FIX_GUIDE.md](./FAISS_FIX_GUIDE.md)** - Solutions for FAISS crashes on macOS
-- **[NUMPY_INDEX_CHANGES.md](./NUMPY_INDEX_CHANGES.md)** - NumPy index alternative documentation
 
 ## Dataset Sources
 
