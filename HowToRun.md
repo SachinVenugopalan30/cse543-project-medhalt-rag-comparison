@@ -774,8 +774,6 @@ This creates `embeddings.npy` instead of `faiss.index`. The rest of the pipeline
 
 **Performance note:** NumPy index is ~20-30% slower than FAISS but completely stable on macOS.
 
-**For more details, see [FAISS_FIX_GUIDE.md](./FAISS_FIX_GUIDE.md)**
-
 **5. Out of memory during indexing:**
 ```bash
 # Reduce batch size
