@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+env/
+ENV/
+
+# Environment
+.env
+.env.local
+
+# Data directories
+data/raw/
+data/chunks/
+data/chunks_backup/
+data/chunks_backup/*.jsonl
+data/chunks/*.jsonl
+!data/.gitkeep
+
+# Index files
+index/*.index
+index/*.pkl
+index/*.json
+index/*.npy
+!index/.gitkeep
+
+# Graph files
+graph/*.pkl
+graph/*.json
+!graph/.gitkeep
+
+# Results
+results/
+reports/
+!results/.gitkeep
+!reports/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Large files
+*.gz
+*.zip
+*.tar
+*.xml.zip
+
+# Model files
+*.bin
+*.pt
+*.pth

@@ -1,0 +1,41 @@
+# Core dependencies
+python-dotenv
+tqdm
+pandas
+numpy
+scipy
+
+# LLM & AI frameworks
+openai
+transformers
+sentence-transformers
+torch
+
+# NLP & Medical NLP
+nltk
+spacy==3.7.2
+scispacy
+# Install models separately: python -m spacy download en_core_sci_sm
+
+# Vector search & indexing
+faiss-cpu
+
+# Graph database
+neo4j
+networkx
+
+# Data fetching & parsing
+requests
+beautifulsoup4
+lxml
+biopython
+datasets
+
+# Evaluation & metrics
+scikit-learn
+evaluate
+
+# Utilities
+jsonlines
+pyyaml
+click

@@ -1,0 +1,6 @@
+Collecting scispacy
+  Using cached scispacy-0.5.5-py3-none-any.whl.metadata (18 kB)
+Collecting spacy<3.8.0,>=3.7.0 (from scispacy)
+  Using cached spacy-3.7.5.tar.gz (1.3 MB)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'error'
