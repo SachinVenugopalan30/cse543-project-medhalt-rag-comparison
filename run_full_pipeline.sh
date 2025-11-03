@@ -1,9 +1,10 @@
 # Set variables
-MODEL="gpt-4o-mini"
-PROVIDER="openai"  # Options: openai, gemini
-LIMIT=150
+MODEL="gemini-2.5-pro"
+PROVIDER="gemini"  # Options: openai, gemini
+LIMIT=10  # Reduced for testing
 QUESTIONS="data/raw/medhalt/reasoning_FCT/test.jsonl"
 TOPK=10
+MAX_TOKENS=8192  # Gemini's max output tokens (8192 for most models)
 
 # Create file suffix with provider and model name (lowercase, replace dots with dashes)
 PROVIDER_SUFFIX=$(echo "$PROVIDER" | tr '[:upper:]' '[:lower:]')
@@ -27,6 +28,7 @@ python baseline/baseline_run.py \
   --provider $PROVIDER \
   --mode zero-shot \
   --limit $LIMIT \
+  --max-tokens $MAX_TOKENS \
   --out results/baseline_results_${FILE_SUFFIX}.jsonl
 
 # Step 2: Score Baseline
@@ -59,6 +61,7 @@ python rag/generate.py \
   --model $MODEL \
   --provider $PROVIDER \
   --template strict \
+  --max-tokens $MAX_TOKENS \
   --out results/rag_results_strict_${FILE_SUFFIX}.jsonl
 
 # Step 5: Score RAG Strict
@@ -77,6 +80,7 @@ python rag/generate.py \
   --model $MODEL \
   --provider $PROVIDER \
   --template lenient \
+  --max-tokens $MAX_TOKENS \
   --out results/rag_results_lenient_${FILE_SUFFIX}.jsonl
 
 # Step 7: Score RAG Lenient

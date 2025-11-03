@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from openai import OpenAI
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google import genai
+from google.genai import types
 from tqdm import tqdm
 
 from prompt_templates import (
@@ -85,9 +85,8 @@ class RAGGenerator:
             if not api_key:
                 raise ValueError("Google API key not found. Set GOOGLE_API_KEY environment variable.")
 
-            # Configure Gemini
-            genai.configure(api_key=api_key)
-            self.client = genai.GenerativeModel(model)
+            # Initialize Gemini client with the new google.genai library
+            self.client = genai.Client(api_key=api_key)
 
         else:
             raise ValueError(f"Unsupported provider: {provider}. Choose 'openai' or 'gemini'.")
@@ -177,85 +176,129 @@ class RAGGenerator:
                 # Build prompt for Gemini (combine system and user prompts)
                 full_prompt = f"{prompt['system']}\n\n{prompt['user']}"
 
-                # Configure generation parameters
-                generation_config = {
+                # Configure generation parameters using the new google.genai types
+                config_params = {
                     "temperature": self.temperature,
-                    "max_output_tokens": self.max_tokens,
                 }
 
-                # Disable safety settings for medical content
-                safety_settings = {
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                }
+                # Only add max_output_tokens if explicitly set (not None or 0)
+                if self.max_tokens and self.max_tokens > 0:
+                    config_params["max_output_tokens"] = self.max_tokens
+                    logger.info(f"Setting max_output_tokens to {self.max_tokens}")
+                else:
+                    logger.info(f"No max_output_tokens limit set (max_tokens={self.max_tokens}) - using model default")
+                    logger.info(f"Note: {self.model} may have its own default output limit")
+
+                # Add safety settings to config
+                config_params["safety_settings"] = [
+                    types.SafetySetting(
+                        category='HARM_CATEGORY_HATE_SPEECH',
+                        threshold='OFF'
+                    ),
+                    types.SafetySetting(
+                        category='HARM_CATEGORY_DANGEROUS_CONTENT',
+                        threshold='OFF'
+                    ),
+                    types.SafetySetting(
+                        category='HARM_CATEGORY_HARASSMENT',
+                        threshold='OFF'
+                    ),
+                    types.SafetySetting(
+                        category='HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                        threshold='OFF'
+                    ),
+                ]
+
+                generation_config = types.GenerateContentConfig(**config_params)
 
                 try:
-                    response = self.client.generate_content(
-                        full_prompt,
-                        generation_config=generation_config,
-                        safety_settings=safety_settings
+                    # Use the new google.genai API
+                    response = self.client.models.generate_content(
+                        model=self.model,
+                        contents=full_prompt,
+                        config=generation_config
                     )
                     self.temperature_supported = True
                 except Exception as api_error:
+                    logger.error(f"Gemini API error: {api_error}")
                     # If temperature fails, retry without it
                     if "temperature" in str(api_error):
                         logger.warning(f"Temperature {self.temperature} not supported for {self.model}, using default")
                         self.temperature_supported = False
-                        generation_config.pop("temperature", None)
-                        response = self.client.generate_content(
-                            full_prompt,
-                            generation_config=generation_config,
-                            safety_settings=safety_settings
+                        config_params.pop("temperature", None)
+                        generation_config = types.GenerateContentConfig(**config_params)
+                        response = self.client.models.generate_content(
+                            model=self.model,
+                            contents=full_prompt,
+                            config=generation_config
                         )
                     else:
                         raise
 
                 # Extract response text with error handling
                 try:
-                    response_text = response.text.strip()
+                    # Try to get text directly
+                    if hasattr(response, 'text') and response.text:
+                        response_text = response.text.strip()
+                        logger.debug(f"Successfully extracted text ({len(response_text)} chars)")
+                    else:
+                        raise ValueError("response.text is None or empty")
                 except Exception as text_error:
                     # Handle cases where response.text is not available
                     logger.warning(f"Failed to extract text from Gemini response: {text_error}")
 
-                    # Check if response has candidates
+                    response_text = None
+
+                    # Try to extract from candidates
                     if hasattr(response, 'candidates') and response.candidates:
                         candidate = response.candidates[0]
-                        finish_reason = candidate.finish_reason if hasattr(candidate, 'finish_reason') else None
 
-                        # Map finish_reason to meaningful message
-                        reason_map = {
-                            0: "FINISH_REASON_UNSPECIFIED",
-                            1: "STOP (normal completion)",
-                            2: "MAX_TOKENS (hit token limit)",
-                            3: "SAFETY (blocked by safety filters)",
-                            4: "RECITATION (blocked due to recitation)",
-                            5: "OTHER"
-                        }
-                        reason_str = reason_map.get(int(finish_reason), f"Unknown ({finish_reason})") if finish_reason is not None else "Unknown (None)"
+                        # Check finish_reason (new API returns enum/string, not int)
+                        if hasattr(candidate, 'finish_reason'):
+                            finish_reason = str(candidate.finish_reason)
+                            logger.error(f"Finish reason: {finish_reason}")
 
-                        logger.error(f"Gemini finish_reason: {reason_str}")
+                            # Check if it's MAX_TOKENS
+                            if 'MAX_TOKENS' in finish_reason:
+                                logger.error(f"Hit max tokens limit! Current limit: {self.max_tokens}")
+                                logger.error("Consider increasing MAX_TOKENS in run_full_pipeline.sh")
 
-                        # Try to extract partial text if available
-                        if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
-                            parts = candidate.content.parts
-                            if parts and len(parts) > 0 and hasattr(parts[0], 'text'):
-                                response_text = parts[0].text.strip()
-                                logger.info("Extracted partial text from response")
-                            else:
-                                response_text = f"ERROR: No text content available (finish_reason: {reason_str})"
-                        else:
-                            response_text = f"ERROR: No text content available (finish_reason: {reason_str})"
-                    else:
-                        response_text = "ERROR: Empty response from Gemini"
+                        # Check safety ratings
+                        if hasattr(candidate, 'safety_ratings'):
+                            logger.error(f"Safety ratings: {candidate.safety_ratings}")
 
-                # Extract token usage (Gemini provides this differently)
+                        # Try to extract text from content
+                        if hasattr(candidate, 'content'):
+                            content = candidate.content
+                            if hasattr(content, 'parts') and content.parts:
+                                for i, part in enumerate(content.parts):
+                                    if hasattr(part, 'text') and part.text:
+                                        response_text = part.text.strip()
+                                        logger.info(f"Extracted text from part {i} ({len(response_text)} chars)")
+                                        break
+
+                    # If still no text, set error message
+                    if not response_text:
+                        finish_reason_str = str(candidate.finish_reason) if hasattr(response, 'candidates') and response.candidates and hasattr(response.candidates[0], 'finish_reason') else "unknown"
+                        logger.error("No text found in response")
+                        response_text = f"ERROR: No text in Gemini response (finish_reason: {finish_reason_str})"
+
+                # Extract token usage
                 usage_info = {
-                    'prompt_tokens': response.usage_metadata.prompt_token_count if hasattr(response, 'usage_metadata') else 0,
-                    'completion_tokens': response.usage_metadata.candidates_token_count if hasattr(response, 'usage_metadata') else 0,
-                    'total_tokens': response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else 0
+                    'prompt_tokens': 0,
+                    'completion_tokens': 0,
+                    'total_tokens': 0
                 }
+
+                if hasattr(response, 'usage_metadata'):
+                    usage_metadata = response.usage_metadata
+                    if hasattr(usage_metadata, 'prompt_token_count'):
+                        usage_info['prompt_tokens'] = usage_metadata.prompt_token_count
+                    if hasattr(usage_metadata, 'candidates_token_count'):
+                        usage_info['completion_tokens'] = usage_metadata.candidates_token_count
+                    if hasattr(usage_metadata, 'total_token_count'):
+                        usage_info['total_tokens'] = usage_metadata.total_token_count
+                    logger.debug(f"Token usage: {usage_info}")
 
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
