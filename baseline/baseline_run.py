@@ -16,6 +16,8 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from tqdm import tqdm
 
 from baseline_prompts import (
@@ -77,35 +79,53 @@ class BaselineRunner:
         api_key: Optional[str] = None,
         temperature: float = 0.1,
         max_tokens: int = 500,
-        mode: str = "zero-shot"
+        mode: str = "zero-shot",
+        provider: str = "openai"
     ):
         """
         Initialize baseline runner.
 
         Args:
-            model: OpenAI model name
-            api_key: OpenAI API key
+            model: Model name (e.g., gpt-3.5-turbo for OpenAI, gemini-pro for Gemini)
+            api_key: API key
             temperature: Sampling temperature
             max_tokens: Max response tokens
             mode: Prompt mode ("zero-shot", "few-shot", "medhalt")
+            provider: Model provider ("openai" or "gemini")
         """
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.mode = mode
+        self.provider = provider.lower()
 
-        # Set API key
-        api_key = api_key or os.getenv('OPENAI_API_KEY')
-        if not api_key:
-            raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
+        # Initialize appropriate client based on provider
+        if self.provider == "openai":
+            # Set API key
+            api_key = api_key or os.getenv('OPENAI_API_KEY')
+            if not api_key:
+                raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
 
-        # Initialize OpenAI client (new API)
-        self.client = OpenAI(api_key=api_key)
+            # Initialize OpenAI client
+            self.client = OpenAI(api_key=api_key)
+
+        elif self.provider == "gemini":
+            # Set API key
+            api_key = api_key or os.getenv('GOOGLE_API_KEY')
+            if not api_key:
+                raise ValueError("Google API key not found. Set GOOGLE_API_KEY environment variable.")
+
+            # Configure Gemini
+            genai.configure(api_key=api_key)
+            self.client = genai.GenerativeModel(model)
+
+        else:
+            raise ValueError(f"Unsupported provider: {provider}. Choose 'openai' or 'gemini'.")
 
         # Track if temperature is supported (to avoid repeated failures)
         self.temperature_supported = None  # None = unknown, True/False after first attempt
 
-        logger.info(f"Initialized with model: {model}, mode: {mode}")
+        logger.info(f"Initialized with provider: {self.provider}, model: {model}, mode: {mode}")
 
     def run_single_question(
         self,
@@ -130,59 +150,151 @@ class BaselineRunner:
         else:
             prompt = build_baseline_prompt(question, mode=self.mode, options=options)
 
-        # Call OpenAI API
+        # Call appropriate API based on provider
         try:
-            # Build API call parameters
-            api_params = {
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": prompt['system']},
-                    {"role": "user", "content": prompt['user']}
-                ],
-                "max_completion_tokens": self.max_tokens
-            }
+            if self.provider == "openai":
+                # Build API call parameters for OpenAI
+                api_params = {
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": prompt['system']},
+                        {"role": "user", "content": prompt['user']}
+                    ],
+                    "max_completion_tokens": self.max_tokens
+                }
 
-            # Only include temperature if it's supported and not default
-            # Some models (like gpt-4o-mini) only support default temperature
-            use_temperature = (
-                self.temperature is not None and
-                self.temperature != 1.0 and
-                self.temperature_supported != False  # Only skip if we know it's not supported
-            )
+                # Only include temperature if it's supported and not default
+                # Some models (like gpt-4o-mini) only support default temperature
+                use_temperature = (
+                    self.temperature is not None and
+                    self.temperature != 1.0 and
+                    self.temperature_supported != False  # Only skip if we know it's not supported
+                )
 
-            if use_temperature:
-                api_params["temperature"] = self.temperature
-
-            try:
-                response = self.client.chat.completions.create(**api_params)
-                # If we get here with temperature, it's supported
                 if use_temperature:
-                    self.temperature_supported = True
-            except Exception as api_error:
-                # If temperature fails, retry without it
-                if use_temperature and "temperature" in str(api_error):
-                    logger.warning(f"Temperature {self.temperature} not supported for {self.model}, using default")
-                    self.temperature_supported = False  # Remember for future calls
-                    api_params.pop("temperature", None)
-                    response = self.client.chat.completions.create(**api_params)
-                else:
-                    raise
+                    api_params["temperature"] = self.temperature
 
-            # Extract response
-            response_text = response.choices[0].message.content.strip()
+                try:
+                    response = self.client.chat.completions.create(**api_params)
+                    # If we get here with temperature, it's supported
+                    if use_temperature:
+                        self.temperature_supported = True
+                except Exception as api_error:
+                    # If temperature fails, retry without it
+                    if use_temperature and "temperature" in str(api_error):
+                        logger.warning(f"Temperature {self.temperature} not supported for {self.model}, using default")
+                        self.temperature_supported = False  # Remember for future calls
+                        api_params.pop("temperature", None)
+                        response = self.client.chat.completions.create(**api_params)
+                    else:
+                        raise
+
+                # Extract response
+                response_text = response.choices[0].message.content.strip()
+
+                # Extract token usage
+                usage_info = {
+                    'prompt_tokens': response.usage.prompt_tokens,
+                    'completion_tokens': response.usage.completion_tokens,
+                    'total_tokens': response.usage.total_tokens
+                }
+
+            elif self.provider == "gemini":
+                # Build prompt for Gemini (combine system and user prompts)
+                full_prompt = f"{prompt['system']}\n\n{prompt['user']}"
+
+                # Configure generation parameters
+                generation_config = {
+                    "temperature": self.temperature,
+                    "max_output_tokens": self.max_tokens,
+                }
+
+                # Disable safety settings for medical content
+                safety_settings = {
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                }
+
+                try:
+                    response = self.client.generate_content(
+                        full_prompt,
+                        generation_config=generation_config,
+                        safety_settings=safety_settings
+                    )
+                    self.temperature_supported = True
+                except Exception as api_error:
+                    # If temperature fails, retry without it
+                    if "temperature" in str(api_error):
+                        logger.warning(f"Temperature {self.temperature} not supported for {self.model}, using default")
+                        self.temperature_supported = False
+                        generation_config.pop("temperature", None)
+                        response = self.client.generate_content(
+                            full_prompt,
+                            generation_config=generation_config,
+                            safety_settings=safety_settings
+                        )
+                    else:
+                        raise
+
+                # Extract response text with error handling
+                try:
+                    response_text = response.text.strip()
+                except Exception as text_error:
+                    # Handle cases where response.text is not available
+                    logger.warning(f"Failed to extract text from Gemini response: {text_error}")
+
+                    # Check if response has candidates
+                    if hasattr(response, 'candidates') and response.candidates:
+                        candidate = response.candidates[0]
+                        finish_reason = candidate.finish_reason if hasattr(candidate, 'finish_reason') else None
+
+                        # Map finish_reason to meaningful message
+                        reason_map = {
+                            0: "FINISH_REASON_UNSPECIFIED",
+                            1: "STOP (normal completion)",
+                            2: "MAX_TOKENS (hit token limit)",
+                            3: "SAFETY (blocked by safety filters)",
+                            4: "RECITATION (blocked due to recitation)",
+                            5: "OTHER"
+                        }
+                        reason_str = reason_map.get(int(finish_reason), f"Unknown ({finish_reason})") if finish_reason is not None else "Unknown (None)"
+
+                        logger.error(f"Gemini finish_reason: {reason_str}")
+
+                        # Try to extract partial text if available
+                        if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                            parts = candidate.content.parts
+                            if parts and len(parts) > 0 and hasattr(parts[0], 'text'):
+                                response_text = parts[0].text.strip()
+                                logger.info("Extracted partial text from response")
+                            else:
+                                response_text = f"ERROR: No text content available (finish_reason: {reason_str})"
+                        else:
+                            response_text = f"ERROR: No text content available (finish_reason: {reason_str})"
+                    else:
+                        response_text = "ERROR: Empty response from Gemini"
+
+                # Extract token usage (Gemini provides this differently)
+                usage_info = {
+                    'prompt_tokens': response.usage_metadata.prompt_token_count if hasattr(response, 'usage_metadata') else 0,
+                    'completion_tokens': response.usage_metadata.candidates_token_count if hasattr(response, 'usage_metadata') else 0,
+                    'total_tokens': response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else 0
+                }
+
+            else:
+                raise ValueError(f"Unsupported provider: {self.provider}")
 
             result = {
                 'id': question_id,
                 'question': question,
                 'response': response_text,
                 'model': self.model,
+                'provider': self.provider,
                 'mode': self.mode,
                 'timestamp': datetime.now().isoformat(),
-                'usage': {
-                    'prompt_tokens': response.usage.prompt_tokens,
-                    'completion_tokens': response.usage.completion_tokens,
-                    'total_tokens': response.usage.total_tokens
-                }
+                'usage': usage_info
             }
 
             # If options provided, extract the selected option letter
@@ -339,7 +451,14 @@ def main():
         "--model",
         type=str,
         default="gpt-3.5-turbo",
-        help="OpenAI model name"
+        help="Model name (e.g., gpt-3.5-turbo for OpenAI, gemini-pro for Gemini)"
+    )
+    parser.add_argument(
+        "--provider",
+        type=str,
+        default="openai",
+        choices=["openai", "gemini"],
+        help="Model provider (openai or gemini)"
     )
     parser.add_argument(
         "--mode",
@@ -384,6 +503,7 @@ def main():
     # Initialize runner
     runner = BaselineRunner(
         model=args.model,
+        provider=args.provider,
         temperature=args.temperature,
         max_tokens=args.max_tokens,
         mode=args.mode

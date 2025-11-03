@@ -23,10 +23,21 @@ source venv/bin/activate
 
 ### 2. Configure API Keys
 
-Edit `.env` file and ensure your OpenAI API key is set:
+Edit `.env` file and set your API key(s). You can use either OpenAI, Google Gemini, or both:
+
 ```bash
-OPENAI_API_KEY=your_key_here
+# For OpenAI (default)
+OPENAI_API_KEY=your_openai_key_here
+
+# For Google Gemini (optional)
+GOOGLE_API_KEY=your_google_api_key_here
 ```
+
+**Note:** The project now supports three providers:
+- **OpenAI** (default): Uses models like `gpt-3.5-turbo`, `gpt-4`, `gpt-4o-mini`
+- **Gemini**: Uses Google's models like `gemini-pro`, `gemini-1.5-pro`, `gemini-1.5-flash`
+
+You only need to set the API key for the provider you plan to use.
 
 ### 3. Optional: Start Neo4j
 
@@ -278,28 +289,45 @@ ls -lh graph/
 
 ### Step 3.1: Run Baseline LLM (No RAG)
 
-**For GPT-3.5-turbo:**
+**For OpenAI GPT-3.5-turbo:**
 ```bash
 python baseline/baseline_run.py \
   --dataset data/raw/medhalt/reasoning_FCT/test.jsonl \
   --model gpt-3.5-turbo \
+  --provider openai \
   --mode zero-shot \
   --temperature 0.1 \
   --limit 50 \
   --out results/baseline_results.jsonl
 ```
 
-**For newer models (gpt-4o-mini, gpt-4, etc.) that only support default temperature:**
+**For OpenAI newer models (gpt-4o-mini, gpt-4, etc.) that only support default temperature:**
 ```bash
 python baseline/baseline_run.py \
   --dataset data/raw/medhalt/reasoning_FCT/test.jsonl \
   --model gpt-4o-mini \
+  --provider openai \
   --mode zero-shot \
   --limit 50 \
   --out results/baseline_results.jsonl
 ```
 
-**Note:** Newer models like gpt-4o-mini only support default temperature (1.0). The script will automatically handle this by retrying without temperature if the API rejects it.
+**For Google Gemini:**
+```bash
+python baseline/baseline_run.py \
+  --dataset data/raw/medhalt/reasoning_FCT/test.jsonl \
+  --model gemini-pro \
+  --provider gemini \
+  --mode zero-shot \
+  --temperature 0.1 \
+  --limit 50 \
+  --out results/baseline_results.jsonl
+```
+
+**Note:**
+- Newer OpenAI models like gpt-4o-mini only support default temperature (1.0). The script will automatically handle this by retrying without temperature if the API rejects it.
+- For Gemini, you can use models like `gemini-pro`, `gemini-1.5-pro`, or `gemini-1.5-flash`
+- The `--provider` parameter defaults to `openai` if not specified
 
 **What this does:**
 - Runs LLM on 50 Med-HALT questions (limited for testing)
@@ -412,22 +440,35 @@ RAG supports three template modes:
 
 #### Option A: Strict RAG (Conservative, High Precision)
 
-**For GPT-3.5-turbo (supports custom temperature):**
+**For OpenAI GPT-3.5-turbo (supports custom temperature):**
 ```bash
 python rag/generate.py \
   --candidates results/retrieval_results.jsonl \
   --model gpt-3.5-turbo \
+  --provider openai \
   --template strict \
   --temperature 0.1 \
   --out results/rag_results_strict.jsonl
 ```
 
-**For GPT-4o-mini or newer models (default temperature only):**
+**For OpenAI GPT-4o-mini or newer models (default temperature only):**
 ```bash
 python rag/generate.py \
   --candidates results/retrieval_results.jsonl \
   --model gpt-4o-mini \
+  --provider openai \
   --template strict \
+  --out results/rag_results_strict.jsonl
+```
+
+**For Google Gemini:**
+```bash
+python rag/generate.py \
+  --candidates results/retrieval_results.jsonl \
+  --model gemini-pro \
+  --provider gemini \
+  --template strict \
+  --temperature 0.1 \
   --out results/rag_results_strict.jsonl
 ```
 
@@ -438,22 +479,35 @@ python rag/generate.py \
 
 #### Option B: Lenient RAG (Less Conservative, Better Coverage)
 
-**For GPT-3.5-turbo:**
+**For OpenAI GPT-3.5-turbo:**
 ```bash
 python rag/generate.py \
   --candidates results/retrieval_results.jsonl \
   --model gpt-3.5-turbo \
+  --provider openai \
   --template lenient \
   --temperature 0.1 \
   --out results/rag_results_lenient.jsonl
 ```
 
-**For GPT-4o-mini:**
+**For OpenAI GPT-4o-mini:**
 ```bash
 python rag/generate.py \
   --candidates results/retrieval_results.jsonl \
   --model gpt-4o-mini \
+  --provider openai \
   --template lenient \
+  --out results/rag_results_lenient.jsonl
+```
+
+**For Google Gemini:**
+```bash
+python rag/generate.py \
+  --candidates results/retrieval_results.jsonl \
+  --model gemini-pro \
+  --provider gemini \
+  --template lenient \
+  --temperature 0.1 \
   --out results/rag_results_lenient.jsonl
 ```
 

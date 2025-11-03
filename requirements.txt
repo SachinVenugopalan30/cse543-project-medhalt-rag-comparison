@@ -7,6 +7,7 @@ scipy
 
 # LLM & AI frameworks
 openai
+google-generativeai
 transformers
 sentence-transformers
 torch

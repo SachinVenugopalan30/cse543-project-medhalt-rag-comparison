@@ -87,7 +87,8 @@ class EntityExtractor:
         normalized = entity_text.lower().strip()
 
         # Try ICD-10 mapping (for diseases/conditions)
-        if entity_label in ['DISEASE', 'SYMPTOM', 'CONDITION']:
+        # Note: Some SciSpaCy models use generic "ENTITY" label
+        if entity_label in ['DISEASE', 'SYMPTOM', 'CONDITION', 'ENTITY']:
             if normalized in self.icd_mapping:
                 codes.append(f"ICD10:{self.icd_mapping[normalized]}")
 

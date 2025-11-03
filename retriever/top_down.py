@@ -102,7 +102,8 @@ class TopDownRetriever:
             label = entity['label']
 
             # Try ICD-10 mapping (diseases/conditions)
-            if label in ['DISEASE', 'SYMPTOM', 'CONDITION']:
+            # Note: Some SciSpaCy models use generic "ENTITY" label
+            if label in ['DISEASE', 'SYMPTOM', 'CONDITION', 'ENTITY']:
                 if text in self.icd_mapping:
                     ctv_codes.append(f"ICD10:{self.icd_mapping[text]}")
 

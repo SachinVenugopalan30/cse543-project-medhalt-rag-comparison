@@ -7,6 +7,7 @@
   "baseline": {
     "dataset": "data/raw/medhalt/test.jsonl",
     "model": "gpt-3.5-turbo",
+    "provider": "openai",
     "mode": "zero-shot",
     "temperature": 0.1,
     "max_tokens": 500,
@@ -16,6 +17,7 @@
   "rag": {
     "dataset": "data/raw/medhalt/test.jsonl",
     "model": "gpt-3.5-turbo",
+    "provider": "openai",
     "template": "strict",
     "temperature": 0.1,
     "max_tokens": 500,
@@ -41,6 +43,8 @@
     "Default configuration for testing the full pipeline",
     "Set limit in baseline/rag for quick testing (e.g., 'limit': 100)",
     "Set neo4j_uri if using Neo4j instead of NetworkX graph",
-    "Adjust alpha/beta for graph vs embedding weighting in retrieval"
+    "Adjust alpha/beta for graph vs embedding weighting in retrieval",
+    "Provider options: 'openai' (default) or 'gemini'",
+    "For Gemini, use model names like 'gemini-pro' or 'gemini-1.5-pro'"
   ]
 }

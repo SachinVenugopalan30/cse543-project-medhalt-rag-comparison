@@ -49,6 +49,7 @@ class ExperimentOrchestrator:
         baseline_config = self.config['baseline']
         dataset = baseline_config['dataset']
         model = baseline_config.get('model', 'gpt-3.5-turbo')
+        provider = baseline_config.get('provider', 'openai')
         mode = baseline_config.get('mode', 'zero-shot')
 
         output_file = self.results_dir / f"baseline_{self.timestamp}.jsonl"
@@ -57,6 +58,7 @@ class ExperimentOrchestrator:
             'python', 'baseline/baseline_run.py',
             '--dataset', dataset,
             '--model', model,
+            '--provider', provider,
             '--mode', mode,
             '--out', str(output_file)
         ]
@@ -107,6 +109,7 @@ class ExperimentOrchestrator:
             'python', 'rag/generate.py',
             '--candidates', str(retrieval_output),
             '--model', rag_config.get('model', 'gpt-3.5-turbo'),
+            '--provider', rag_config.get('provider', 'openai'),
             '--template', rag_config.get('template', 'strict'),
             '--out', str(generation_output)
         ]
